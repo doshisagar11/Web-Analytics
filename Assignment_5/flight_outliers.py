@@ -3,6 +3,7 @@ import time
 from collections import OrderedDict
 import unidecode
 from unidecode import unidecode
+import unicodedata
 from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
@@ -17,7 +18,7 @@ import time
 import os
 from datetime import datetime
 from sklearn.cluster import DBSCAN
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler,MinMaxScaler
 from scipy.spatial.distance import euclidean
 
 driver = webdriver.Chrome("C:/Users/Sagar Doshi/Downloads/chromedriver")
@@ -36,7 +37,16 @@ class DataFrame(object):
             self.data = list_of_list[1:]
         self.data = [OrderedDict(zip(self.header, row)) for row in self.data]
 
+def accents(text):
 
+    try:
+        text = unicode(text, 'utf-8')
+    except:
+        pass
+    text = unicodedata.normalize('NFD', text)
+    text = text.encode('ascii', 'ignore')
+    text = text.decode("utf-8")
+    return str(text)
 def scrape_data(start_date, from_place, to_place, city_name):
 
     to_input = driver.find_element_by_xpath('//*[@id="root"]/div[3]/div[3]/div/div[2]/div/div')
@@ -71,7 +81,7 @@ def scrape_data(start_date, from_place, to_place, city_name):
     while i < len(results):
         print(len(results))
         print(i)
-        city = results[i].find_element_by_class_name('LJTSM3-v-c').text
+        city = accents(results[i].find_element_by_class_name('LJTSM3-v-c').text)
         time.sleep(0.50)
 
         cityname = city.split(',')[0].strip().lower()
@@ -136,7 +146,7 @@ def scrape_data_90(start_date, from_place, to_place, city_name):
     while i < len(results):
         print(len(results))
         print(i)
-        city = results[i].find_element_by_class_name('LJTSM3-v-c').text
+        city = accents(results[i].find_element_by_class_name('LJTSM3-v-c').text)
         time.sleep(0.50)
 
         cityname = city.split(',')[0].strip().lower()
@@ -167,7 +177,7 @@ def scrape_data_90(start_date, from_place, to_place, city_name):
     i = 0
     while i < len(results):
         print(len(results))
-        city = results[i].find_element_by_class_name('LJTSM3-v-c').text
+        city = accents(results[i].find_element_by_class_name('LJTSM3-v-c').text)
         time.sleep(0.50)
 
         cityname = city.split(',')[0].strip().lower()
@@ -243,7 +253,7 @@ def task_3_dbscan(start_date, from_place, to_place, city_name):
     while i < len(results):
         print(len(results))
         print(i)
-        city = results[i].find_element_by_class_name('LJTSM3-v-c').text
+        city = accents(results[i].find_element_by_class_name('LJTSM3-v-c').text)
         time.sleep(0.50)
 
         cityname = city.split(',')[0].strip().lower()
@@ -330,7 +340,105 @@ def task_3_dbscan(start_date, from_place, to_place, city_name):
 
     print outlier
     plt.show()
+
+def task_3_IQR(start_date, from_place, to_place, city_name):
+
+    to_input = driver.find_element_by_xpath('//*[@id="root"]/div[3]/div[3]/div/div[2]/div/div')
+    to_input.click()
+    actions = ActionChains(driver)
+    actions.send_keys(from_place)
+    actions.send_keys(Keys.ENTER)
+    actions.perform()
+    time.sleep(0.20)
+    # The place we want to fly to, that location is shown by the xpath below
+    to_input = driver.find_element_by_xpath('//*[@id="root"]/div[3]/div[3]/div/div[4]/div/div')
+    to_input.click()
+    actions = ActionChains(driver)
+    actions.send_keys(to_place)
+    actions.send_keys(Keys.ENTER)
+    actions.perform()
+    time.sleep(0.50)
+    curr_url = driver.current_url
+    changed_url = curr_url + 'd=' + str(start_date.year) + '-0' + str(start_date.month) + '-' + str(start_date.day)
+
+    driver.close()
+    up_driver = webdriver.Chrome("C:/Users/Sagar Doshi/Downloads/chromedriver")
+    up_driver.get(changed_url)
+    time.sleep(0.50)
+
+    results = up_driver.find_elements_by_class_name('LJTSM3-v-d')
+    time.sleep(0.50)
+    j = 0
+    x = []
+    y = []
+    i = 0
+    while i < len(results):
+        print(len(results))
+        print(i)
+        city = accents(results[i].find_element_by_class_name('LJTSM3-v-c').text)
+        time.sleep(0.50)
+
+        cityname = city.split(',')[0].strip().lower()
+
+        if cityname == city_name.lower():
+            bars = results[i].find_elements_by_class_name('LJTSM3-w-x')
+            time.sleep(0.50)
+            for bar in bars:
+                ActionChains(up_driver).move_to_element(bar).perform()
+                time.sleep(0.50)
+                x.append(
+                    (results[i].find_element_by_class_name('LJTSM3-w-w').text,
+                     results[i].find_element_by_class_name('LJTSM3-w-h').text))
+                j += 1
+            break
+        else:
+            print(cityname)
+            print('else chal raha hai')
+            i = i + 1
+            continue
+    for dum in x:
+        print(dum[0])
+        price = float(dum[0].replace('$', '').replace(',', ''))
+        y.append(price)
+    df = pd.DataFrame(y, columns=['Price'])
+    outliers = []
+    o_p = []
+    Prices = df['Price'].values.tolist()
+    sort_points = sorted(Prices)
+    median_price = np.median(sort_points)
+    mid = len(sort_points) / 2
+    if (len(sort_points) % 2 == 0):
+        f_quart = np.median(sort_points[:mid])
+        t_quart = np.median(sort_points[mid:])
+    else:
+        f_quart = np.median(sort_points[:mid])
+        t_quart = np.median(sort_points[mid + 1:])
+    s_quart = median_price
+
+    IQR = t_quart-f_quart
+    lower = f_quart - (1.5 * IQR)
+    upper = t_quart + (1.5 * IQR)
+
+    for Price in Prices:
+        if lower<=Price<=upper:
+            continue
+        else:
+            o_p.append(Price)
+
+    for outlier in o_p:
+
+        f_price = df[Prices.index(outlier):(Prices.index(outlier)+1)]['Price'].values.tolist()
+        outliers.append(f_price[0])
+
+    print outliers
+    fig = plt.figure(1, figsize=(9, 6))
+    ax = fig.add_subplot(111)
+    bp = ax.boxplot(Prices)
+    plt.show(block=True)
+
+
 today = date.today()
 #scrape_data(today,'New York City', 'South America', 'Aruba')
 #scrape_data_90(today,'New York City', 'South America', 'Aruba')
-task_3_dbscan(today,'New York City', 'South America', 'Aruba')
+#task_3_dbscan(today,'New York City', 'South America', 'Aruba')
+task_3_IQR(today,'New York City', 'South America', 'Aruba')
